@@ -16,9 +16,10 @@ build:
   # unsloth_zoo / cut_cross_entropy require python >=3.10
   skip: true  # [py<310]
   script:
-    # Relax upstream upper caps that pkgs/main exceeds (trl 1.4.0, datasets 4.8.2) so the
-    # built wheel metadata matches the recipe run deps and `pip check` passes.
+    # Relax upstream upper caps that pkgs/main exceeds (pytorch 2.12, trl 1.4.0, datasets 4.8.2)
+    # so the built wheel metadata matches the recipe run deps and `pip check` passes.
     - sed -i.bak "s/protobuf<4.0.0/protobuf/g" pyproject.toml
+    - sed -i 's/torch>=2.4.0,<2.11.0/torch>=2.4.0/' pyproject.toml
     - sed -i 's/trl>=0.18.2,!=0.19.0,<=0.24.0/trl>=0.18.2/' pyproject.toml
     - sed -i 's/datasets>=3.4.1,!=4.0\.\*,!=4.1.0,<4.4.0/datasets>=3.4.1/' pyproject.toml
     - {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation

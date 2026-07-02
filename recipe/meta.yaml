@@ -11,10 +11,9 @@ source:
 
 build:
   number: 0
-  # triton / xformers / unsloth_zoo (hard runtime deps) are only available on linux-64 on pkgs/main
-  skip: true  # [not linux64]
-  # unsloth_zoo / cut_cross_entropy require python >=3.10
-  skip: true  # [py<310]
+  # linux-64 only: triton / xformers / unsloth_zoo (hard runtime deps) are linux-64-only on
+  # pkgs/main. py>=3.10: unsloth_zoo / cut_cross_entropy require python >=3.10.
+  skip: true  # [not linux64 or py<310]
   script:
     # Relax upstream upper caps that pkgs/main exceeds (pytorch 2.12, trl 1.4.0, datasets 4.8.2)
     # so the built wheel metadata matches the recipe run deps and `pip check` passes.

@@ -83,7 +83,8 @@ about:
     and Qwen 2-5x faster while using up to 80% less memory, with no accuracy
     degradation, via custom Triton kernels, manual autograd, and optimized
     attention / RoPE / cross-entropy implementations.
-  doc_url: https://docs.unsloth.ai
+  # docs.unsloth.ai 301-redirects here; use the direct URL so the linter reachable_url check passes
+  doc_url: https://unsloth.ai/docs
   dev_url: https://github.com/unslothai/unsloth
 
 extra:

@@ -12,14 +12,12 @@ source:
 build:
   number: 0
   # linux-64 only: triton / xformers / unsloth_zoo (hard runtime deps) are linux-64-only on
-  # pkgs/main. py>=3.10: unsloth_zoo / cut_cross_entropy require python >=3.10.
-  skip: true  # [not linux64 or py<310]
+  # pkgs/main. py 3.10-3.13: unsloth_zoo / cut_cross_entropy require python >=3.10; the
+  # in-range datasets (upstream caps <4.4.0 -> 4.3.0) has no py3.14 build on pkgs/main
+  # (its multiprocess 0.70.15 / fsspec 2025.7.0 deps stop at py3.13), so the whole
+  # torch-2.10 stack caps at py3.13.
+  skip: true  # [not linux64 or py<310 or py>313]
   script:
-    # Relax upstream upper caps that pkgs/main exceeds (pytorch 2.12, trl 1.4.0, datasets 4.8.2)
-    # so the built wheel metadata matches the recipe run deps and `pip check` passes.
-    - sed -i.bak 's/torch>=2.4.0,<2.11.0/torch>=2.4.0/' pyproject.toml
-    - sed -i 's/trl>=0.18.2,!=0.19.0,<=0.24.0/trl>=0.18.2/' pyproject.toml
-    - sed -i 's/datasets>=3.4.1,!=4.0\.\*,!=4.1.0,<4.4.0/datasets>=3.4.1/' pyproject.toml
     - {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
 
 requirements:
@@ -36,8 +34,9 @@ requirements:
     - pydantic
     - pyyaml
     - nest-asyncio
-    # torch / xformers
-    - pytorch >=2.4.0
+    # torch / xformers -- upstream pins torch>=2.4.0,<2.11.0; the torch-2.10 stack
+    # (xformers 0.0.34 + torchao via unsloth_zoo) resolves this to pytorch 2.10.0.
+    - pytorch >=2.4.0,<2.11.0
     - xformers >=0.0.27.post2
     - bitsandbytes >=0.45.5,!=0.46.0,!=0.48.0
     # triton
@@ -51,15 +50,14 @@ requirements:
     - tyro
     - protobuf
     - sentencepiece >=0.2.0
-    # upper caps relaxed (sed above); pkgs/main carries newer trl/datasets
-    - datasets >=3.4.1
+    - datasets >=3.4.1,!=4.0.*,!=4.1.0,<4.4.0
     - accelerate >=0.34.1
     - peft >=0.18.0,!=0.11.0
     - huggingface_hub >=0.34.0
     - hf-transfer
     - diffusers
-    - transformers >=4.51.3,<=5.5.0
-    - trl >=0.18.2
+    - transformers >=4.51.3,!=4.52.0,!=4.52.1,!=4.52.2,!=4.52.3,!=4.53.0,!=4.54.0,!=4.55.0,!=4.55.1,!=4.57.0,!=4.57.4,!=4.57.5,!=5.0.0,!=5.1.0,<=5.5.0
+    - trl >=0.18.2,!=0.19.0,<=0.24.0
     - sentence-transformers
     - unsloth_zoo >=2026.6.6
     - torchvision

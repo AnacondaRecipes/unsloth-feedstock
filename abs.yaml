@@ -1,9 +1,0 @@
-# TEMPORARY -- MUST BE REMOVED BEFORE MERGE.
-# Verifies the py3.13 solve against the diffusers torch-2.10 metapackage from
-# diffusers-feedstock#14 (bn4) before that PR is released to pkgs/main.
-# The bn3 build on pkgs/main deduplicated the `diffusers` metapackage and
-# exact-pinned only the torch-2.12 line, so `diffusers` is unresolvable under
-# this recipe's `pytorch <2.11` on py3.13 until bn4 lands.
-# Once diffusers#14 is published to pkgs/main, delete this file.
-channels:
-  - https://staging.continuum.io/pbp/fs/diffusers-feedstock/pr14/6ad3bad

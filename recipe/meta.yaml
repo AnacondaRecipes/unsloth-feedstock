@@ -32,6 +32,12 @@ build:
   # (see recipe/conda_build_config.yaml).
   string: cpu_py{{ CONDA_PY }}h{{ PKG_HASH }}_{{ build }}    # [gpu_variant != "cuda"]
   string: cuda_py{{ CONDA_PY }}h{{ PKG_HASH }}_{{ build }}   # [gpu_variant == "cuda"]
+  # Nothing is compiled, so the C/C++ compilers below contribute no linkage; without
+  # this their run_exports (libgcc-ng / libstdcxx-ng) would land on the CUDA variant
+  # only, making its run deps differ from the CPU variant's for no reason.
+  ignore_run_exports_from:                  # [gpu_variant == "cuda"]
+    - {{ compiler('c') }}                   # [gpu_variant == "cuda"]
+    - {{ compiler('cxx') }}                 # [gpu_variant == "cuda"]
   script:
     - {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
 
@@ -40,7 +46,13 @@ requirements:
     # Nothing is compiled here -- unsloth is pure Python. cuda-nvcc is present because
     # pulling it into the build env is what routes the PBP build and test tasks to the
     # GPU worker pool; that is what makes the `__cuda` run dep resolvable and lets the
-    # import test below actually execute on the CUDA variants.
+    # import test below actually execute on the CUDA variant.
+    # compiler('c') and compiler('cxx') are required alongside it: cuda-nvcc's
+    # activation script hard-fails without them --
+    #   "cuda-nvcc: Please add the `compiler("c")` and `compiler("cxx")` packages
+    #    to the environment."
+    - {{ compiler('c') }}                   # [gpu_variant == "cuda"]
+    - {{ compiler('cxx') }}                 # [gpu_variant == "cuda"]
     - {{ compiler('cuda') }}                # [gpu_variant == "cuda"]
   host:
     - python

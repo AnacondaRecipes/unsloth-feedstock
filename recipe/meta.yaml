@@ -24,12 +24,14 @@ build:
   # (its multiprocess 0.70.15 / fsspec 2025.7.0 deps stop at py3.13), so the whole
   # torch-2.10 stack caps at py3.13.
   skip: true  # [not linux64 or py<310 or py>313]
-  # The cpu_ / cuda{{ ... }} prefix MUST be in the build string: without it the three
-  # variants deduplicate into a single package. py{{ CONDA_PY }} must stay too -- a
-  # manual string overrides conda-build's default py-prefix, and the package is
-  # python-version-specific (.pyc bytecode tagged cpXY).
-  string: cpu_py{{ CONDA_PY }}h{{ PKG_HASH }}_{{ build }}                                                  # [gpu_variant != "cuda"]
-  string: cuda{{ cuda_compiler_version | replace('.', '') }}_py{{ CONDA_PY }}h{{ PKG_HASH }}_{{ build }}   # [gpu_variant == "cuda"]
+  # The cpu_ / cuda_ prefix MUST be in the build string: without it the two variants
+  # deduplicate into a single package. py{{ CONDA_PY }} must stay too -- a manual
+  # string overrides conda-build's default py-prefix, and the package is
+  # python-version-specific (.pyc bytecode tagged cpXY). No CUDA version in the cuda
+  # string: nothing is compiled against a toolkit, so the build is not specific to one
+  # (see recipe/conda_build_config.yaml).
+  string: cpu_py{{ CONDA_PY }}h{{ PKG_HASH }}_{{ build }}    # [gpu_variant != "cuda"]
+  string: cuda_py{{ CONDA_PY }}h{{ PKG_HASH }}_{{ build }}   # [gpu_variant == "cuda"]
   script:
     - {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
 
@@ -46,11 +48,12 @@ requirements:
     - setuptools
     - setuptools-scm
     - wheel
-    # Supplies the `cuda-version >=12.8,<13` (resp. >=13.0,<14) run_export that keeps
-    # pytorch / xformers / triton / bitsandbytes on one CUDA line at install time.
-    # Listed directly rather than picked up transitively from cuda-cudart-dev: nothing
-    # here links against cudart (pure Python), so a -dev lib in host would be dead weight.
-    - cuda-version {{ cuda_compiler_version }}   # [gpu_variant == "cuda"]
+    # No cuda-version / cuda-cudart-dev here on purpose. Nothing links against cudart
+    # (pure Python), so there is no toolkit to pin; cuda-version also carries no
+    # run_exports (its `constraints` are empty), so listing it in host would not
+    # constrain run either way. Which CUDA line gets installed is decided by pytorch /
+    # xformers / triton / bitsandbytes, each of which pins cuda-version itself. Same
+    # reasoning as catboost's win cuda variant.
   run:
     - python
     # Hard + unbounded, per the CUDA variant packaging decision: __cuda is the binary

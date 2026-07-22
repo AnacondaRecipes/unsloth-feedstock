@@ -3,38 +3,42 @@
 # declares `Environment :: GPU :: NVIDIA CUDA`.
 #
 # Nothing here compiles CUDA code -- unsloth is pure Python. cuda_compiler_version is
-# still set on the CUDA variants because {{ compiler('cuda') }} in meta.yaml is what
-# routes those PBP build/test tasks to a GPU-equipped worker pool; a plain worker
-# exposes only __glibc/__linux/__unix, so the `__cuda` run dep would fail the test
-# phase's conda-create. This mirrors catboost's win cuda variant, which is a wheel
-# repack that likewise compiles no CUDA code and sets the key for the same reason.
+# set anyway because {{ compiler('cuda') }} in meta.yaml is what routes the CUDA
+# variant's PBP build/test tasks to a GPU-equipped worker pool; a plain worker exposes
+# only __glibc/__linux/__unix, so the `__cuda` run dep would fail the test phase's
+# conda-create. The 13.0 is ARBITRARY -- it selects the worker pool, nothing else. No
+# nvcc output ends up in the package and no CUDA library is linked, so there is no
+# toolkit to pin and no reason to build one variant per CUDA version: a 12.8 and a 13.0
+# build would be byte-identical in metadata. Accordingly there is a single `cuda`
+# gpu_variant and the build string carries no version (`cuda_py313...`).
 #
-# Upstream pins torch>=2.4.0,<2.11.0, which resolves to pytorch 2.10.0. That line ships
-# gpu_cuda128 / gpu_cuda130 on pkgs/main -- NOT the 12.9 the aggregate CBC defaults to
-# -- so the matrix is overridden here (per-key REPLACES aggregate). Every torch-2.10-line
-# runtime dep has both builds: xformers 0.0.34, torchao 0.16.0, triton 3.6.0,
-# bitsandbytes 0.49.2. (triton 3.7.x dropped cuda128; the upstream `triton >=3.0.0` floor
-# lets the solver fall back to 3.6.0 for the 12.8 variant.)
+# This mirrors catboost's win cuda variant, which is a wheel repack that likewise
+# compiles no CUDA code: it tags a single `cuda` gpu_variant purely to advertise CUDA
+# capability, and deliberately omits the cuda-version host dep and run pin that its
+# linux (source-built) variants carry.
 #
-# The `none` / CPU variant is kept rather than skipped flash-attn style, so unsloth stays
-# installable on a GPU-less machine -- the same arrangement pytorch itself ships
-# (cpu_mkl / cpu_openblas alongside gpu_cuda128 / gpu_cuda130). The CUDA variants take a
-# +100 build-number offset in meta.yaml so conda prefers them wherever __cuda is present.
+# Which CUDA line a user actually gets is decided by the runtime deps, not by us:
+# pytorch / xformers / triton / bitsandbytes each carry their own `cuda-version` pins,
+# and unsloth's `run:` constrains those to *cuda* builds. Upstream caps torch<2.11.0,
+# resolving to pytorch 2.10.0, whose gpu_cuda128 / gpu_cuda130 builds are both covered.
 #
-# `cuda_compiler: cuda-nvcc` is deliberately NOT re-declared here -- it is inherited from
-# the aggregate parent CBC. (Pre-2026-06 PBP needed a local copy; that bug is fixed and
-# the local copy is now flagged as redundant in review.)
+# The `none` / CPU variant is kept rather than skipped flash-attn style, so unsloth
+# stays installable on a GPU-less machine -- the same arrangement pytorch itself ships
+# (cpu_mkl / cpu_openblas alongside gpu_cuda128 / gpu_cuda130). The CUDA variant takes a
+# +100 build-number offset in meta.yaml so conda prefers it wherever __cuda is present.
+#
+# `cuda_compiler: cuda-nvcc` is deliberately NOT re-declared here -- it is inherited
+# from the aggregate parent CBC. (Pre-2026-06 PBP needed a local copy; that bug is
+# fixed and the local copy is now flagged as redundant in review.)
 #
 # linux-64 only, matching build/skip: unsloth's hard runtime deps (triton / xformers /
 # unsloth_zoo) are linux-64-only on pkgs/main.
 gpu_variant:
   - none
   - cuda                        # [linux and x86_64]
-  - cuda                        # [linux and x86_64]
 
 cuda_compiler_version:          # [linux and x86_64]
   - none                        # [linux and x86_64]
-  - 12.8                        # [linux and x86_64]
   - 13.0                        # [linux and x86_64]
 
 zip_keys:                       # [linux and x86_64]

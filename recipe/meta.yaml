@@ -16,19 +16,38 @@ build:
   # in-range datasets (upstream caps <4.4.0 -> 4.3.0) has no py3.14 build on pkgs/main
   # (its multiprocess 0.70.15 / fsspec 2025.7.0 deps stop at py3.13), so the whole
   # torch-2.10 stack caps at py3.13.
-  skip: true  # [not linux64 or py<310 or py>313]
+  # GPU-only, so the `none` CUDA variant is dropped and only cuda128/cuda130 ship
+  # (mirrors flash-attn). See recipe/conda_build_config.yaml for why 12.8/13.0.
+  skip: true  # [not linux64 or py<310 or py>313 or cuda_compiler_version == "none"]
+  # cuda{{ ... }} MUST be in the build string: without it the two CUDA variants
+  # deduplicate into a single package. py{{ CONDA_PY }} must stay too -- a manual
+  # string overrides conda-build's default py-prefix, and the package is
+  # python-version-specific (.pyc bytecode tagged cpXY).
+  string: cuda{{ cuda_compiler_version | replace('.', '') }}_py{{ CONDA_PY }}h{{ PKG_HASH }}_{{ PKG_BUILDNUM }}
   script:
     - {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
 
 requirements:
+  build:
+    # Nothing is compiled here -- unsloth is pure Python. cuda-nvcc is present because
+    # pulling it into the build env is what routes the PBP build and test tasks to the
+    # GPU worker pool; that is what makes the `__cuda` run dep resolvable and lets the
+    # import test below actually execute.
+    - {{ compiler('cuda') }}
   host:
     - python
     - pip
     - setuptools
     - setuptools-scm
     - wheel
+    # Supplies the `cuda-version >=12.8,<13` (resp. >=13.0,<14) run_export that keeps
+    # pytorch / xformers / triton / bitsandbytes on one CUDA line at install time.
+    - cuda-version {{ cuda_compiler_version }}
   run:
     - python
+    # unsloth requires an NVIDIA GPU at runtime; pytorch and xformers already declare
+    # __cuda on their CUDA builds and this makes the same requirement explicit here.
+    - __cuda
     # direct
     - typer
     - pydantic
@@ -36,9 +55,14 @@ requirements:
     - nest-asyncio
     # torch / xformers -- upstream pins torch>=2.4.0,<2.11.0; the torch-2.10 stack
     # (xformers 0.0.34 + torchao via unsloth_zoo) resolves this to pytorch 2.10.0.
-    - pytorch >=2.4.0,<2.11.0
+    # The upstream version range is untouched; the *cuda* build glob only excludes the
+    # cpu_mkl / cpu_openblas builds, which cannot serve a GPU-only package.
+    - pytorch >=2.4.0,<2.11.0 *cuda*
     - xformers >=0.0.27.post2
-    - bitsandbytes >=0.45.5,!=0.46.0,!=0.48.0
+    # *cuda* for the same reason as pytorch: bitsandbytes ships CPU builds at a higher
+    # build number than its cuda128 build, so an unconstrained solve silently picks the
+    # CPU one and unsloth's 4-bit/QLoRA paths lose their kernels. Version range is upstream.
+    - bitsandbytes >=0.45.5,!=0.46.0,!=0.48.0 *cuda*
     # triton
     - triton >=3.0.0
     # huggingface
@@ -63,8 +87,11 @@ requirements:
     - torchvision
 
 test:
-  # No import test: importing unsloth requires a GPU runtime and patches torch/transformers
-  # (mirrors conda-forge, which disabled the import test for the same reason).
+  # Importing unsloth needs a real accelerator (unsloth_zoo.get_device_type() raises
+  # NotImplementedError otherwise). The CUDA-only build routes the test task to a GPU
+  # worker, so the import can be exercised for real rather than skipped.
+  imports:
+    - unsloth
   commands:
     - pip check
   requires:
@@ -89,8 +116,6 @@ extra:
   skip-lints:
     # pytorch/triton/xformers are CBC-pinned runtime-only deps (pure-Python; not linked at build)
     - cbc_dep_in_run_missing_from_host
-    # No import test: importing unsloth requires a GPU runtime + unsloth_zoo patching.
-    - missing_imports_or_run_test_py
   recipe-maintainers:
     - isuruf
     - timkpaine

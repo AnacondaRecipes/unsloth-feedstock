@@ -1,0 +1,21 @@
+# unsloth is GPU-only: unsloth_zoo (a hard run dep) calls get_device_type() at import
+# and raises NotImplementedError without a CUDA/XPU/HIP device, and upstream declares
+# `Environment :: GPU :: NVIDIA CUDA`. Building CUDA variants is also what routes the
+# PBP build+test tasks to the GPU worker pool -- a CPU worker exposes only
+# __glibc/__linux/__unix, so the `__cuda` run dep would be unsatisfiable there.
+#
+# Upstream pins torch>=2.4.0,<2.11.0, which resolves to pytorch 2.10.0. That line
+# ships gpu_cuda128 / gpu_cuda130 on pkgs/main -- NOT the 12.9 the aggregate CBC
+# defaults to -- so the matrix is overridden here (per-key REPLACES aggregate).
+# Every torch-2.10-line runtime dep has both builds: xformers 0.0.34, torchao 0.16.0,
+# triton 3.6.0, bitsandbytes 0.49.2. (triton 3.7.x dropped cuda128; the upstream
+# `triton >=3.0.0` floor lets the solver fall back to 3.6.0 for the 12.8 variant.)
+#
+# `none` is listed unselected so non-linux-x86_64 platforms still render a variant
+# (which build/skip then drops); on linux-64 it is skipped so only CUDA builds ship,
+# mirroring flash-attn.
+cuda_compiler: cuda-nvcc
+cuda_compiler_version:
+  - none
+  - 12.8   # [linux and x86_64]
+  - 13.0   # [linux and x86_64]

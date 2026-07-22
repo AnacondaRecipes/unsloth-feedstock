@@ -1,21 +1,43 @@
-# unsloth is GPU-only: unsloth_zoo (a hard run dep) calls get_device_type() at import
-# and raises NotImplementedError without a CUDA/XPU/HIP device, and upstream declares
-# `Environment :: GPU :: NVIDIA CUDA`. Building CUDA variants is also what routes the
-# PBP build+test tasks to the GPU worker pool -- a CPU worker exposes only
-# __glibc/__linux/__unix, so the `__cuda` run dep would be unsatisfiable there.
+# unsloth targets NVIDIA GPUs: unsloth_zoo (a hard run dep) calls get_device_type() at
+# import and raises NotImplementedError without a CUDA/XPU/HIP device, and upstream
+# declares `Environment :: GPU :: NVIDIA CUDA`.
 #
-# Upstream pins torch>=2.4.0,<2.11.0, which resolves to pytorch 2.10.0. That line
-# ships gpu_cuda128 / gpu_cuda130 on pkgs/main -- NOT the 12.9 the aggregate CBC
-# defaults to -- so the matrix is overridden here (per-key REPLACES aggregate).
-# Every torch-2.10-line runtime dep has both builds: xformers 0.0.34, torchao 0.16.0,
-# triton 3.6.0, bitsandbytes 0.49.2. (triton 3.7.x dropped cuda128; the upstream
-# `triton >=3.0.0` floor lets the solver fall back to 3.6.0 for the 12.8 variant.)
+# Nothing here compiles CUDA code -- unsloth is pure Python. cuda_compiler_version is
+# still set on the CUDA variants because {{ compiler('cuda') }} in meta.yaml is what
+# routes those PBP build/test tasks to a GPU-equipped worker pool; a plain worker
+# exposes only __glibc/__linux/__unix, so the `__cuda` run dep would fail the test
+# phase's conda-create. This mirrors catboost's win cuda variant, which is a wheel
+# repack that likewise compiles no CUDA code and sets the key for the same reason.
 #
-# `none` is listed unselected so non-linux-x86_64 platforms still render a variant
-# (which build/skip then drops); on linux-64 it is skipped so only CUDA builds ship,
-# mirroring flash-attn.
-cuda_compiler: cuda-nvcc
-cuda_compiler_version:
+# Upstream pins torch>=2.4.0,<2.11.0, which resolves to pytorch 2.10.0. That line ships
+# gpu_cuda128 / gpu_cuda130 on pkgs/main -- NOT the 12.9 the aggregate CBC defaults to
+# -- so the matrix is overridden here (per-key REPLACES aggregate). Every torch-2.10-line
+# runtime dep has both builds: xformers 0.0.34, torchao 0.16.0, triton 3.6.0,
+# bitsandbytes 0.49.2. (triton 3.7.x dropped cuda128; the upstream `triton >=3.0.0` floor
+# lets the solver fall back to 3.6.0 for the 12.8 variant.)
+#
+# The `none` / CPU variant is kept rather than skipped flash-attn style, so unsloth stays
+# installable on a GPU-less machine -- the same arrangement pytorch itself ships
+# (cpu_mkl / cpu_openblas alongside gpu_cuda128 / gpu_cuda130). The CUDA variants take a
+# +100 build-number offset in meta.yaml so conda prefers them wherever __cuda is present.
+#
+# `cuda_compiler: cuda-nvcc` is deliberately NOT re-declared here -- it is inherited from
+# the aggregate parent CBC. (Pre-2026-06 PBP needed a local copy; that bug is fixed and
+# the local copy is now flagged as redundant in review.)
+#
+# linux-64 only, matching build/skip: unsloth's hard runtime deps (triton / xformers /
+# unsloth_zoo) are linux-64-only on pkgs/main.
+gpu_variant:
   - none
-  - 12.8   # [linux and x86_64]
-  - 13.0   # [linux and x86_64]
+  - cuda                        # [linux and x86_64]
+  - cuda                        # [linux and x86_64]
+
+cuda_compiler_version:          # [linux and x86_64]
+  - none                        # [linux and x86_64]
+  - 12.8                        # [linux and x86_64]
+  - 13.0                        # [linux and x86_64]
+
+zip_keys:                       # [linux and x86_64]
+  -                             # [linux and x86_64]
+    - gpu_variant               # [linux and x86_64]
+    - cuda_compiler_version     # [linux and x86_64]

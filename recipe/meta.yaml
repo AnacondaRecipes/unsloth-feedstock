@@ -13,28 +13,20 @@ source:
   sha256: 3d944b58d566ee8f6cd07841aa66d52d6046aab091ca546ecdfd24c7efc4a051
 
 build:
-  # CUDA variants are offset by +100 (see the `build` set above) so conda prefers
-  # them wherever __cuda is present, while the CPU build stays installable on a
-  # GPU-less machine -- the same arrangement pytorch itself ships (cpu_mkl /
-  # cpu_openblas alongside gpu_cuda128 / gpu_cuda130).
+  # CUDA variants offset +100 so conda prefers them where __cuda is present; the CPU
+  # build stays installable on GPU-less machines.
   number: {{ build }}
-  # linux-64 only: triton / xformers / unsloth_zoo (hard runtime deps) are linux-64-only on
-  # pkgs/main. py 3.10-3.13: unsloth_zoo / cut_cross_entropy require python >=3.10; the
-  # in-range datasets (upstream caps <4.4.0 -> 4.3.0) has no py3.14 build on pkgs/main
-  # (its multiprocess 0.70.15 / fsspec 2025.7.0 deps stop at py3.13), so the whole
-  # torch-2.10 stack caps at py3.13.
+  # linux-64 only: hard deps triton/xformers/unsloth_zoo are linux-64-only on pkgs/main.
+  # py 3.10-3.13: unsloth_zoo/cut_cross_entropy need >=3.10; the torch-2.10 stack has no
+  # py3.14 build on pkgs/main.
   skip: true  # [not linux64 or py<310 or py>313]
-  # The cpu_ / cuda_ prefix MUST be in the build string: without it the two variants
-  # deduplicate into a single package. py{{ CONDA_PY }} must stay too -- a manual
-  # string overrides conda-build's default py-prefix, and the package is
-  # python-version-specific (.pyc bytecode tagged cpXY). No CUDA version in the cuda
-  # string: nothing is compiled against a toolkit, so the build is not specific to one
-  # (see recipe/conda_build_config.yaml).
+  # The cpu_/cuda_ prefix MUST stay or the two variants dedupe into one package. Keep
+  # py{{ CONDA_PY }} too: a manual string drops conda-build's default py-prefix, and the
+  # package is python-specific (cpXY .pyc). No CUDA version -- nothing links a toolkit.
   string: cpu_py{{ CONDA_PY }}h{{ PKG_HASH }}_{{ build }}    # [gpu_variant != "cuda"]
   string: cuda_py{{ CONDA_PY }}h{{ PKG_HASH }}_{{ build }}   # [gpu_variant == "cuda"]
-  # Nothing is compiled, so the C/C++ compilers below contribute no linkage; without
-  # this their run_exports (libgcc-ng / libstdcxx-ng) would land on the CUDA variant
-  # only, making its run deps differ from the CPU variant's for no reason.
+  # Nothing is compiled, so drop the C/C++ run_exports (libgcc-ng/libstdcxx-ng); else
+  # they'd land on the cuda variant only, diverging its run deps from the CPU variant's.
   ignore_run_exports_from:                  # [gpu_variant == "cuda"]
     - {{ compiler('c') }}                   # [gpu_variant == "cuda"]
     - {{ compiler('cxx') }}                 # [gpu_variant == "cuda"]

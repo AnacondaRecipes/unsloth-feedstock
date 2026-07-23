@@ -68,10 +68,6 @@ requirements:
     # reasoning as catboost's win cuda variant.
   run:
     - python
-    # Hard + unbounded, per the CUDA variant packaging decision: __cuda is the binary
-    # "is there a GPU?" gate and cuda-version carries the version pin. In run rather than
-    # run_constrained because no in-channel package depends on unsloth, so nothing needs
-    # to resolve it on a non-GPU host.
     - __cuda                                # [gpu_variant == "cuda"]
     # direct
     - typer

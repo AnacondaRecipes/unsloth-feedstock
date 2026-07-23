@@ -35,14 +35,10 @@ build:
 
 requirements:
   build:
-    # Nothing is compiled here -- unsloth is pure Python. cuda-nvcc is present because
-    # pulling it into the build env is what routes the PBP build and test tasks to the
-    # GPU worker pool; that is what makes the `__cuda` run dep resolvable and lets the
-    # import test below actually execute on the CUDA variant.
-    # compiler('c') and compiler('cxx') are required alongside it: cuda-nvcc's
-    # activation script hard-fails without them --
-    #   "cuda-nvcc: Please add the `compiler("c")` and `compiler("cxx")` packages
-    #    to the environment."
+    # Nothing is compiled -- unsloth is pure Python. cuda-nvcc is here only to route the
+    # PBP build/test tasks to the GPU worker pool, which is what makes __cuda resolvable
+    # and lets the import test run on the cuda variant. compiler('c')/compiler('cxx')
+    # are required because cuda-nvcc's activation script hard-fails without them.
     - {{ compiler('c') }}                   # [gpu_variant == "cuda"]
     - {{ compiler('cxx') }}                 # [gpu_variant == "cuda"]
     - {{ compiler('cuda') }}                # [gpu_variant == "cuda"]
@@ -52,12 +48,9 @@ requirements:
     - setuptools
     - setuptools-scm
     - wheel
-    # No cuda-version / cuda-cudart-dev here on purpose. Nothing links against cudart
-    # (pure Python), so there is no toolkit to pin; cuda-version also carries no
-    # run_exports (its `constraints` are empty), so listing it in host would not
-    # constrain run either way. Which CUDA line gets installed is decided by pytorch /
-    # xformers / triton / bitsandbytes, each of which pins cuda-version itself. Same
-    # reasoning as catboost's win cuda variant.
+    # No cuda-version / cuda-cudart-dev on purpose: nothing links cudart, so there's no
+    # toolkit to pin. Which CUDA line installs is decided by pytorch/xformers/triton/
+    # bitsandbytes, each of which pins cuda-version itself.
   run:
     - python
     - __cuda                                # [gpu_variant == "cuda"]

@@ -1,38 +1,9 @@
-# unsloth targets NVIDIA GPUs: unsloth_zoo (a hard run dep) calls get_device_type() at
-# import and raises NotImplementedError without a CUDA/XPU/HIP device, and upstream
-# declares `Environment :: GPU :: NVIDIA CUDA`.
-#
-# Nothing here compiles CUDA code -- unsloth is pure Python. cuda_compiler_version is
-# set anyway because {{ compiler('cuda') }} in meta.yaml is what routes the CUDA
-# variant's PBP build/test tasks to a GPU-equipped worker pool; a plain worker exposes
-# only __glibc/__linux/__unix, so the `__cuda` run dep would fail the test phase's
-# conda-create. The 13.0 is ARBITRARY -- it selects the worker pool, nothing else. No
-# nvcc output ends up in the package and no CUDA library is linked, so there is no
-# toolkit to pin and no reason to build one variant per CUDA version: a 12.8 and a 13.0
-# build would be byte-identical in metadata. Accordingly there is a single `cuda`
-# gpu_variant and the build string carries no version (`cuda_py313...`).
-#
-# This mirrors catboost's win cuda variant, which is a wheel repack that likewise
-# compiles no CUDA code: it tags a single `cuda` gpu_variant purely to advertise CUDA
-# capability, and deliberately omits the cuda-version host dep and run pin that its
-# linux (source-built) variants carry.
-#
-# Which CUDA line a user actually gets is decided by the runtime deps, not by us:
-# pytorch / xformers / triton / bitsandbytes each carry their own `cuda-version` pins,
-# and unsloth's `run:` constrains those to *cuda* builds. Upstream caps torch<2.11.0,
-# resolving to pytorch 2.10.0, whose gpu_cuda128 / gpu_cuda130 builds are both covered.
-#
-# The `none` / CPU variant is kept rather than skipped flash-attn style, so unsloth
-# stays installable on a GPU-less machine -- the same arrangement pytorch itself ships
-# (cpu_mkl / cpu_openblas alongside gpu_cuda128 / gpu_cuda130). The CUDA variant takes a
-# +100 build-number offset in meta.yaml so conda prefers it wherever __cuda is present.
-#
-# `cuda_compiler: cuda-nvcc` is deliberately NOT re-declared here -- it is inherited
-# from the aggregate parent CBC. (Pre-2026-06 PBP needed a local copy; that bug is
-# fixed and the local copy is now flagged as redundant in review.)
-#
-# linux-64 only, matching build/skip: unsloth's hard runtime deps (triton / xformers /
-# unsloth_zoo) are linux-64-only on pkgs/main.
+# unsloth is pure Python (nothing compiles CUDA), but it targets NVIDIA GPUs. The cuda
+# variant exists only so its build/test gets routed to a GPU worker pool; no nvcc output
+# or CUDA lib ends up in the package. Hence cuda_compiler_version is arbitrary and
+# unversioned -- 12.8 vs 13.0 would be byte-identical -- and there's a single `cuda`
+# entry rather than one per CUDA version. The `none`/CPU variant is kept so unsloth stays
+# installable on a GPU-less machine. linux-64 only (see build/skip in meta.yaml).
 gpu_variant:
   - none
   - cuda                        # [linux and x86_64]

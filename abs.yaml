@@ -1,0 +1,4 @@
+# TEMPORARY -- remove before merge. Resolves unsloth_zoo 2026.10.6 from the PBP graph of
+# AnacondaRecipes/unsloth-zoo-feedstock#2 (head f7b2192) until that release lands on pkgs/main.
+channels:
+  - https://package-build.internal.anaconda.com/pkg-orchestrator/v1/channels/graphs/91a05244-bed8-42f6-8944-c6820d4d9854

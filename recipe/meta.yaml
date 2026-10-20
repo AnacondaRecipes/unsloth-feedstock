@@ -120,11 +120,10 @@ requirements:
     - transformers >=4.52.4,!=4.53.0,!=4.54.0,!=4.55.0,!=4.55.1,!=4.57.0,!=4.57.4,!=4.57.5,!=5.0.0,!=5.1.0,<=5.17.0
     - trl >=0.18.2,!=0.19.0,<=1.15.0
   run_constrained:
-    # Bounded extras: `eval`, `flashattention`, the bounds shared by every `audio-torch*`
-    # extra, and the `>=` bounds of `studio`. Not translated: `studio`'s == lockfile pins and
-    # its base-dep bounds (would block co-installation / conflict with run), the per-extra
-    # torch/xformers/torchcodec/bitsandbytes pins of cu*/colab*/audio-torch*/amd, and the
-    # unbounded sentence-transformers (no-op).
+    # Bounded extras: `eval`, `flashattention`, the bounds every `audio-torch*` extra shares,
+    # and `studio`'s `>=` bounds. Not translated: `studio`'s == lockfile pins and base-dep
+    # bounds (block co-installation / conflict with run), the per-extra torch/xformers/
+    # torchcodec/bitsandbytes pins of cu*/colab*/audio-torch*/amd, unbounded sentence-transformers.
     - lm_eval >=0.4.4
     - flash-attn >=2.6.3
     - soundfile >=0.12.1

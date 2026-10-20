@@ -126,7 +126,7 @@ requirements:
     # torchcodec/bitsandbytes pins of cu*/colab*/audio-torch*/amd, unbounded sentence-transformers.
     - lm_eval >=0.4.4
     - flash-attn >=2.6.3
-    - soundfile >=0.12.1
+    - pysoundfile >=0.12.1
     - av >=12.3.0
     - jinja2 >=3.1.0
     - cryptography >=42.0.0

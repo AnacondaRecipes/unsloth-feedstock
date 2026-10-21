@@ -1,36 +1,56 @@
 {% set name = "unsloth" %}
-{% set version = "2026.6.8" %}
+{% set version = "2026.10.6" %}
+# PyPI ships 2026.10.6 as a wheel only (no sdist), so the source is the GitHub tree.
+# Upstream tags the repo per desktop release (v0.1.908-beta), not per PyPI version; this
+# commit is that tag's target and carries unsloth/_version.py == "2026.10.6".
+{% set commit = "5e55110278872d71a0f97fb951fedd1305d926fb" %}
 {% set build_number = 0 %}
 {% set cuda_enabled = (gpu_variant or "none") == "cuda" %}
 {% set build = build_number + 100 if cuda_enabled else build_number %}
 
 package:
-  name: {{ name|lower }}
+  name: {{ name }}
   version: {{ version }}
 
 source:
-  url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/unsloth-{{ version }}.tar.gz
-  sha256: 3d944b58d566ee8f6cd07841aa66d52d6046aab091ca546ecdfd24c7efc4a051
+  url: https://github.com/unslothai/{{ name }}/archive/{{ commit }}.tar.gz
+  sha256: fb3ac1d7f7d24534333e9ba8f967808bc97733d9c29a7ed392976e918eee96f8
 
 build:
   # CUDA variants offset +100 so conda prefers them where __cuda is present; the CPU
   # build stays installable on GPU-less machines.
   number: {{ build }}
   # linux-64 only: hard deps triton/xformers/unsloth_zoo are linux-64-only on pkgs/main.
-  # py 3.10-3.13: unsloth_zoo/cut_cross_entropy need >=3.10; the torch-2.10 stack has no
-  # py3.14 build on pkgs/main.
-  skip: true  # [not linux64 or py<310 or py>313]
+  # py 3.10-3.14: upstream requires-python is >=3.9,<3.15; unsloth_zoo/cut_cross_entropy
+  # on pkgs/main need >=3.10.
+  skip: true  # [not linux64 or py<310 or py>314]
   # The cpu_/cuda_ prefix MUST stay or the two variants dedupe into one package. Keep
   # py{{ CONDA_PY }} too: a manual string drops conda-build's default py-prefix, and the
   # package is python-specific (cpXY .pyc). No CUDA version -- nothing links a toolkit.
   string: cpu_py{{ CONDA_PY }}h{{ PKG_HASH }}_{{ build }}    # [gpu_variant != "cuda"]
   string: cuda_py{{ CONDA_PY }}h{{ PKG_HASH }}_{{ build }}   # [gpu_variant == "cuda"]
-  # Nothing is compiled, so drop the C/C++ run_exports (libgcc-ng/libstdcxx-ng); else
-  # they'd land on the cuda variant only, diverging its run deps from the CPU variant's.
+  # Nothing is compiled or linked, so drop the compilers' run_exports: the C/C++ ones would
+  # add libgcc/libstdcxx to the cuda variant only, and cuda-nvcc's `cuda-version >=13,<14`
+  # would pin this routing-only variant to one CUDA major although pytorch/bitsandbytes/
+  # xformers decide the CUDA line themselves.
   ignore_run_exports_from:                  # [gpu_variant == "cuda"]
     - {{ compiler('c') }}                   # [gpu_variant == "cuda"]
     - {{ compiler('cxx') }}                 # [gpu_variant == "cuda"]
+    - {{ compiler('cuda') }}                # [gpu_variant == "cuda"]
+  entry_points:
+    - unsloth = unsloth_cli:app
+  # The tree also holds the Unsloth Studio desktop app (studio/). Its Python backend is
+  # kept (the `unsloth` CLI imports it); its Vite/npm frontend bundle (studio/frontend/dist)
+  # is not in git and cannot be built offline, so the Studio UI is not shipped.
   script:
+    # Prebuilt swagger-ui/redoc JS bundles (not built from source; main.py mounts /docs only
+    # if the dir exists) and the vendored truststore copy (the conda package is used instead:
+    # native_tls.py imports an installed `truststore` before the vendor dir).
+    - rm -rf studio/backend/assets/docs_ui studio/backend/vendor/truststore studio/backend/vendor/truststore_manifest.json studio/backend/vendor/LICENSE
+    # The GitHub archive has no .git tree, so setuptools-scm's file finder (which
+    # include-package-data relies on) finds nothing and 87 studio/backend/assets/configs
+    # files are dropped. A throwaway repo restores upstream's wheel file set.
+    - git init -q && git add -A && git -c user.name=conda-build -c user.email=conda-build@localhost commit -q -m "conda-build source"
     - {{ PYTHON }} -m pip install . -vv --no-deps --no-build-isolation
 
 requirements:
@@ -39,80 +59,112 @@ requirements:
     # PBP build/test tasks to the GPU worker pool, which is what makes __cuda resolvable
     # and lets the import test run on the cuda variant. compiler('c')/compiler('cxx')
     # are required because cuda-nvcc's activation script hard-fails without them.
-    - {{ compiler('c') }}                   # [gpu_variant == "cuda"]
-    - {{ compiler('cxx') }}                 # [gpu_variant == "cuda"]
-    - {{ compiler('cuda') }}                # [gpu_variant == "cuda"]
+    - git
+    - {{ compiler('c') }}                   # [gpu_variant == "cuda"] analint: should_use_stdlib  # nothing is compiled; no sysroot/glibc pin wanted
+    - {{ compiler('cxx') }}                 # [gpu_variant == "cuda"] analint: should_use_stdlib  # nothing is compiled; no sysroot/glibc pin wanted
+    - {{ compiler('cuda') }}                # [gpu_variant == "cuda"] analint: should_use_stdlib  # GPU-pool routing only; no toolkit is linked
   host:
     - python
     - pip
-    - setuptools
-    - setuptools-scm
-    - wheel
+    # pyproject.toml [build-system].requires pins both exactly.
+    - setuptools 84.0.0
+    - setuptools-scm 9.2.2
     # No cuda-version / cuda-cudart-dev on purpose: nothing links cudart, so there's no
     # toolkit to pin. Which CUDA line installs is decided by pytorch/xformers/triton/
     # bitsandbytes, each of which pins cuda-version itself.
   run:
     - python
     - __cuda                                # [gpu_variant == "cuda"]
-    # direct
-    - typer
+    # pyproject.toml [project.dependencies] -- the CLI stack.
+    - typer >=0.19.0
+    - rich
     - pydantic
     - pyyaml
     - nest-asyncio
-    # torch / xformers -- upstream pins torch>=2.4.0,<2.11.0; the torch-2.10 stack
-    # (xformers 0.0.34 + torchao via unsloth_zoo) resolves this to pytorch 2.10.0.
-    # The upstream version range is untouched on both variants; the *cuda* build glob
-    # only stops the CUDA build pairing with a cpu_mkl / cpu_openblas pytorch.
-    - pytorch >=2.4.0,<2.11.0               # [gpu_variant != "cuda"]
-    - pytorch >=2.4.0,<2.11.0 *cuda*        # [gpu_variant == "cuda"]
-    - xformers >=0.0.27.post2
-    # *cuda* on the CUDA variant for the same reason as pytorch: bitsandbytes ships CPU
-    # builds at a higher build number than its cuda128 build, so an unconstrained solve
-    # silently picks the CPU one and unsloth's 4-bit/QLoRA paths lose their kernels.
-    # Version range is upstream on both.
-    - bitsandbytes >=0.45.5,!=0.46.0,!=0.48.0            # [gpu_variant != "cuda"]
-    - bitsandbytes >=0.45.5,!=0.46.0,!=0.48.0 *cuda*     # [gpu_variant == "cuda"]
-    # triton
-    - triton >=3.0.0
-    # huggingface
+    - huggingface_hub >=0.34.0
+    - structlog >=24.1.0
+    - click >=8.0
+    # Unvendored from studio/backend/vendor (see script); only used by the Studio backend's
+    # native-TLS path, which falls back to certifi if absent.
+    - truststore >=0.10.4
+    # Finetuning stack. Upstream moved it from [project.dependencies] into the
+    # `huggingface` extra, but `import unsloth` cannot work without it and the published
+    # PyPI wheel still declares it as hard Requires-Dist; bounds below are the wheel's,
+    # except diffusers which takes the extra's py>=3.10 floor.
+    - unsloth_zoo >=2026.10.6
     - wheel >=0.42.0
     - packaging
+    # The *cuda* build glob only stops the CUDA build pairing with a cpu_mkl / cpu_openblas
+    # pytorch; the upstream version range is the same on both variants.
+    - pytorch >=2.4.0,<2.15.0               # [gpu_variant != "cuda"] analint: cbc_dep_in_run_missing_from_host  # runtime-only, nothing links torch at build
+    - pytorch >=2.4.0,<2.15.0 *cuda*        # [gpu_variant == "cuda"] analint: cbc_dep_in_run_missing_from_host  # runtime-only, nothing links torch at build
+    - torchvision
     - numpy
     - tqdm
     - psutil
     - tyro
     - protobuf
+    - xformers >=0.0.27.post2
+    # *cuda* on the CUDA variant for the same reason as pytorch: bitsandbytes ships CPU
+    # builds at a higher build number than its cuda build, so an unconstrained solve
+    # silently picks the CPU one and unsloth's 4-bit/QLoRA paths lose their kernels.
+    - bitsandbytes >=0.45.5,!=0.46.0,!=0.48.0            # [gpu_variant != "cuda"]
+    - bitsandbytes >=0.45.5,!=0.46.0,!=0.48.0 *cuda*     # [gpu_variant == "cuda"]
+    - triton >=3.0.0
     - sentencepiece >=0.2.0
-    - datasets >=3.4.1,!=4.0.*,!=4.1.0,<4.4.0
+    - datasets >=3.4.1,!=4.0.*,!=4.1.0,!=4.4.*,!=4.5.0,<5.0.0
     - accelerate >=0.34.1
     - peft >=0.18.0,!=0.11.0
-    - huggingface_hub >=0.34.0
     - hf-transfer
-    - diffusers
-    - transformers >=4.51.3,!=4.52.0,!=4.52.1,!=4.52.2,!=4.52.3,!=4.53.0,!=4.54.0,!=4.55.0,!=4.55.1,!=4.57.0,!=4.57.4,!=4.57.5,!=5.0.0,!=5.1.0,<=5.5.0
-    - trl >=0.18.2,!=0.19.0,<=0.24.0
-    - sentence-transformers
-    - unsloth_zoo >=2026.6.6
-    - torchvision
+    - diffusers >=0.39.0
+    - transformers >=4.52.4,!=4.53.0,!=4.54.0,!=4.55.0,!=4.55.1,!=4.57.0,!=4.57.4,!=4.57.5,!=5.0.0,!=5.1.0,<=5.17.0
+    - trl >=0.18.2,!=0.19.0,<=1.15.0
+  run_constrained:
+    # Bounded extras: `eval`, `flashattention`, the bounds every `audio-torch*` extra shares,
+    # and `studio`'s `>=` bounds. Not translated: `studio`'s == lockfile pins and base-dep
+    # bounds (block co-installation / conflict with run), the per-extra torch/xformers/
+    # torchcodec/bitsandbytes pins of cu*/colab*/audio-torch*/amd, unbounded sentence-transformers.
+    - lm_eval >=0.4.4
+    - flash-attn >=2.6.3
+    - pysoundfile >=0.12.1
+    - av >=12.3.0
+    - jinja2 >=3.1.0
+    - cryptography >=42.0.0
+    - boto3 >=1.34.0
+    - httpx >=0.27.0
+    - fastmcp >=3.0.2
+    - urllib3 >=2.8.0
+    - markdown-it-py >=3.0
+    - hf-xet >=1.5.2,<2.0
 
 test:
   # Importing unsloth needs a real accelerator (unsloth_zoo.get_device_type() raises
   # NotImplementedError otherwise). The CUDA variants route their test task to a GPU
   # worker, so there the import is exercised for real; the CPU variant's worker has no
-  # __cuda and can only run pip check.
+  # __cuda and can only run pip check and the CLI.
   imports:
     - unsloth  # [gpu_variant == "cuda"]
   commands:
     - pip check
+    - unsloth --help
+    # Studio backend data files only ship when the setuptools-scm file finder ran (see script).
+    - python -c "import pathlib, studio.backend as b; p = pathlib.Path(b.__file__).parent / 'assets/configs/model_defaults/default.yaml'; assert p.is_file(), p"
   requires:
     - pip
 
 about:
   home: https://github.com/unslothai/unsloth
-  license: Apache-2.0
-  license_family: Apache
-  license_file: LICENSE
-  summary: 2-5X faster LLM finetuning
+  # The library core is Apache-2.0 (LICENSE); unsloth_cli/, studio/ and unsloth/kernels/moe
+  # are AGPL-3.0-only (COPYING, SPDX headers). Vendored pure-Python code: Cloudflare clef
+  # model (Apache-2.0) and laya (Apache-2.0); truststore (MIT) is removed in the script.
+  license: Apache-2.0 AND AGPL-3.0-only
+  license_family: Other
+  license_file:
+    - LICENSE
+    - COPYING
+    - unsloth/_vendor/clef/LICENSE
+    - studio/backend/vendor/LICENSE.laya
+  summary: 2-5X faster training, reinforcement learning & finetuning
   description: |
     Unsloth makes finetuning of large language models like Llama, Mistral, Gemma
     and Qwen 2-5x faster while using up to 80% less memory, with no accuracy
@@ -124,8 +176,6 @@ about:
 
 extra:
   skip-lints:
-    # pytorch/triton/xformers are CBC-pinned runtime-only deps (pure-Python; not linked at build)
-    - cbc_dep_in_run_missing_from_host
     # The CPU variant has no imports: block -- importing unsloth needs an accelerator,
     # which its CPU worker does not have. The CUDA variants do run the import test.
     - missing_imports_or_run_test_py
